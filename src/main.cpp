@@ -126,7 +126,7 @@ void configTask(void *pvParameters){
 
 void setup(){
   Serial.begin(115200);
-  // longpress();
+  longpress();
   if (EEPROM.read(0) == 0){
     xTaskCreate(configTask, "config", 10000, NULL, 1, &configHundle);
   }
