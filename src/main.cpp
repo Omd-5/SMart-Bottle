@@ -10,9 +10,9 @@
 #include <Adafruit_SSD1306.h> // Hardware-specific library for SSD1306
 #include <Wire.h> // I2C library
 #include <ESP32Servo.h>
+#include <FreeRTOS.h>
 
-
-ESP32Time rtc(0); // Create a Real Time Clock object to be used throughout the code
+ESP32Time rtc(-3840); // Create a Real Time Clock object to be used throughout the code
 
 #define i1 11
 #define i2 9
@@ -21,7 +21,13 @@ ESP32Time rtc(0); // Create a Real Time Clock object to be used throughout the c
 #define BUZZER_PIN       7  // GIOP22 pin connected to buzzer
 #define LEVEL_PIN        13  // GIOP23 pin connected to level sensor
 
-// EEPROM functions
+//EEPROM Section-----------------------------
+
+int ADrStartTime = 1;// String
+int ADrEndTime = 2;// String
+int ADrIntervals = 3;// Int
+
+
 void writeStringToEEPROM(int addrOffset, const String &strToWrite)
 {
   byte len = strToWrite.length();
@@ -30,6 +36,17 @@ void writeStringToEEPROM(int addrOffset, const String &strToWrite)
   {
     EEPROM.write(addrOffset + 1 + i, strToWrite[i]);
   }
+}
+
+void writeTimeToEEPROM() {
+  // Get the current time
+  time_t now = time(nullptr);
+
+  // Write the time to the EEPROM
+  EEPROM.begin(64);
+  EEPROM.put(0, now);
+  EEPROM.commit();
+  EEPROM.end();
 }
 
 String readStringFromEEPROM(int addrOffset)
@@ -55,86 +72,53 @@ int readIntFromEEPROM(int address)
   return (EEPROM.read(address) << 8) + EEPROM.read(address + 1);
 }
 ///////////////////////////////////////////////
+unsigned long period_in_minutes(tm earlier, tm later){
+  int earlier_hours = earlier.tm_hour;
+  int earlier_minutes = earlier.tm_min;
+  int later_hours = later.tm_hour;
+  int later_minutes = later.tm_min;
+  return (later_hours * 60 + later_minutes) - (earlier_hours * 60 + earlier_minutes);
+  }
 
-void SetTime(String timeString){
-  const char *time_details = timeString.c_str();
+
+//#FINISHED 🎉🎉🎉🎉🎉🎉🎉🎉🎉🎉
+tm getTimeformString(String timeString){
+  String  cut = timeString.substring(0, 5);
+  const char *time_details = cut.c_str();
   struct tm tim;
-  strptime(time_details, "%H:%M:%S", &tim);
-  rtc.setTime(30, 24, 15, 17, 1, 2021);
-  // Serial.println('Time set to: ');
-  // Serial.println(tim.tm_hour);
+  strptime(time_details, "%H:%M", &tim);
+ 
+  // Serial.println(tim.tm_sec);
+  return tim;
+}
+
+void SetTime(tm time){
+  rtc.setTime(0,
+  time.tm_min,
+  time.tm_hour,
+   0,0,0);
+  Serial.println("setTime");
+  Serial.println(time.tm_hour);
+  Serial.println(time.tm_min);
 }
 /// ///////////////////////////////////////
-void buzz(){
-  for (int i = 0; i < 5; i++)
-  {
-    tone(BUZZER_PIN, 4100, 1000);
-    delay(200);
-  }
+// void buzz(){
+//   for (int i = 0; i < 5; i++)
+//   {
+    
+//     delay(200);
+//   }
   
-}
+// }
 
 String processor(const String& var){
-  Serial.println(var);
+  // Serial.println(var);
   if(var == "TIME"){ 
-    return rtc.getTime();
+    return rtc.getHour() + ":" + rtc.getMinute();
   }
   return String();
 }
 
-// void display(){
-//   // OLED display declaration
-//   #define SCREEN_WIDTH 128 // OLED display width, in pixels
-//   #define SCREEN_HEIGHT 64 // OLED display height, in pixels
-//   #define OLED_RESET     -1 // Reset pin # (or -1 if sharing Arduino reset pin)
-//   Adafruit_SSD1306 display(SCREEN_WIDTH, SCREEN_HEIGHT, &Wire, OLED_RESET);
-
-//   // Initialize the OLED display
-//   if(!display.begin(SSD1306_SWITCHCAPVCC, 0x3C)) { 
-//     Serial.println(F("SSD1306 allocation failed"));
-//     for(;;); // Don't proceed, loop forever
-//   }
-//   // Clear the buffer
-//   display.clearDisplay();
-//   // Draw a single pixel in white
-//   display.drawPixel(10, 10, SSD1306_WHITE);
-//   // Show the display buffer on the screen. You MUST call display() after
-//   // drawing commands to make them visible on screen!
-//   display.display();
-//   delay(2000);
-//   // Clear the buffer
-//   display.clearDisplay();
-//   // Draw a single pixel in white
-//   display.drawPixel(10, 10, SSD1306_WHITE);
-//   // Show the display buffer on the screen. You MUST call display() after
-//   // drawing commands to make them visible on screen!
-//   display.display();
-//   delay(2000);
-//   // Clear the buffer
-//   display.clearDisplay();
-//   // Draw a single pixel in white
-//   display.drawPixel(10, 10, SSD1306_WHITE);
-//   // Show the display buffer on the screen. You MUST call display() after
-//   // drawing commands to make them visible on screen!
-//   display.display();
-//   delay(2000);
-//   // Clear the buffer
-//   display.clearDisplay();
-//   // Draw a single pixel in white
-//   display.drawPixel(10, 10, SSD1306_WHITE);
-//   // Show the display buffer on the screen. You MUST call display() after
-//   // drawing commands to make them visible on screen!
-//   display.display();
-//   delay(2000);
-//   // Clear the buffer
-//   display.clearDisplay();
-//   // Draw a single pixel in white
-//   display.drawPixel(10, 10, SSD1306_WHITE);
-//   // Show the display buffer on the screen. You MUST call display() after
-//   // drawing commands to make them visible on screen!
-//   display.display();
-//   delay(2000);
-// }
 
 ///////////////////////////////////////////////
  // Handles web server page requests
@@ -153,16 +137,15 @@ const char* ssid = "SMart Bottle"; // Name of access point
 // Global variables
 AsyncWebServer  server(80); // Object of WebServer(HTTP port, 80 is defualt)
 String header; // Variable to store HTTP request
-// String outputState = "off"; // Stores LED state
 
 
-#define SHORT_PRESS_TIME 2000 // 500 milliseconds
-// Variables will change:
-// the current reading from the input pin
-unsigned long pressedTime  = 0;
-unsigned long releasedTime = 0;
+// // #define SHORT_PRESS_TIME 2000 // 500 milliseconds
+// // Variables will change:
+// // the current reading from the input pin
+// unsigned long pressedTime  = 0;
+// unsigned long releasedTime = 0;
 
-xTaskHandle configHundle;
+// xTaskHandle configHundle;
 ///////////////////////////////////////////////////////////////////
 
 
@@ -170,17 +153,17 @@ xTaskHandle configHundle;
 
 
 ///////////////////////////////////////////////////////////////////
-
-const char* PARAM_INPUT_1 = "setTime";
-const char* PARAM_INPUT_2 = "note";
-const char* PARAM_INPUT_3 = "periods";
-const char* PARAM_INPUT_4 = "Notice";
 
 
 
 void notFound(AsyncWebServerRequest *request) {
-  request->send(404, "text/plain", "Not found");
+  request->send(404, "text/plain", "<h3>>Not found</h3> <br> <a href=\"/\">Return to Home Page</a>");
 }
+
+
+
+const char* INPUT_TIME = "time";
+
 
 void StartServer(){
   server.on("/style.css", HTTP_GET, [](AsyncWebServerRequest *request){
@@ -194,55 +177,76 @@ void StartServer(){
   server.on("/get", HTTP_GET, [] (AsyncWebServerRequest *request) {
     String inputMessage;
     String inputParam;
+    String setTime = "00:00";
+    String startAt = "00:00";
+    String endAt = "00:00";
+    int interval = 0;
     // GET input4 value on <ESP_IP>/get?input3=<inputMessage>
-    if (request->hasParam(PARAM_INPUT_4)) {
-      inputMessage = request->getParam(PARAM_INPUT_4)->value();
-      inputParam = PARAM_INPUT_4;
-      writeIntIntoEEPROM(3, inputMessage.toInt());
+    if (request->hasParam(INPUT_TIME)) {
+      setTime = request->getParam(INPUT_TIME)->value();
+      inputMessage = setTime;
+      writeStringToEEPROM(3, setTime);
+    }
+    delay(1000);
+    if (request->hasParam("startAt")) {
+       startAt = request->getParam("startAt")->value();
+       inputMessage = startAt;
+      // inputParam = "startAt";
+      writeStringToEEPROM(ADrStartTime, startAt);
+    }
+    delay(1000);
+    if (request->hasParam("endAt")) {
+       endAt = request->getParam("endAt")->value();
+        inputMessage = endAt;
+      // inputParam = "endAt";
+      writeStringToEEPROM(ADrEndTime, endAt);
+    }
+    delay(1000);
+    if (request->hasParam("periods")) {
+      interval = request->getParam("periods")->value().toInt();
+      inputMessage = interval;
+      writeIntIntoEEPROM(ADrIntervals, interval);
     }
     else {
       inputMessage = "No message sent";
       inputParam = "none";
     }
+    SetTime(getTimeformString(setTime));
     Serial.println(inputMessage);
-    request->send(200, "text/html", "HTTP GET request sent to your ESP on input field (" 
+    Serial.println(readStringFromEEPROM(ADrStartTime));
+    Serial.println(readStringFromEEPROM(ADrEndTime));
+    Serial.print(readIntFromEEPROM(ADrIntervals));
+    
+    request->send(200, "text/html", "<h3>HTTP GET request sent to your ESP on input field (" 
                                      + inputParam + ") with value: " + inputMessage +
-                                     "<br><a href=\"/\">Return to Home Page</a>");
+                                     "<br><a href=\"/\">Return to Home Page</a>"+"</h2>"+
+                                     "<script>setTimeout(function() {window.location.href = \"/\";}, 3000); </script>");
   });
   server.onNotFound(notFound);
   server.begin();
   
 }
 
-// xTask
-void configTask(void *pvParameters){
+// // xTask
+// void configTask(void *pvParameters){
      
   
-  while(1){
-    vTaskDelay(100);
-  }
+//   while(1){
+//     vTaskDelay(100);
+//   }
 
-}
-void ringTask(void *pvParameters){
-  String ringTime = readStringFromEEPROM(3);
+// }
+
+
+// void ringTask(void *pvParameters){
   
 
-  while(1){
-    if (ringTime == rtc.getTime()){
-      buzz();
-      for (int i = 0; i < 10; i++)
-      {
-        digitalWrite(BUILTIN_LED, HIGH);
-        delay(500);
-        digitalWrite(BUILTIN_LED, LOW);
-        delay(250);
-      }
-      delay(readIntFromEEPROM(3)*60000);
-    }
-    vTaskDelay(100);
-  }
 
-}
+//   while(1){
+//         Serial.println("ringTask run!!!");
+        
+
+// }
 
 // void longpress( void *pvParameters){
 //   int lastState = LOW;  // the previous state frgom the input pin
@@ -289,67 +293,81 @@ void ringTask(void *pvParameters){
 // }
 
 ///////////////////////////////////////////////////////////
+ bool start = false;
 void setup(){
-  
+    EEPROM.begin(512);
+    Wire.begin(i1, i2);
+    pinMode(BUILTIN_LED, OUTPUT);
+    pinMode(BUTTON_PIN, INPUT_PULLUP);
+    pinMode(BUZZER_PIN, OUTPUT);
+    pinMode(LEVEL_PIN, INPUT_PULLUP);
+    pinMode(LEDN_PIN, OUTPUT);
 
-  Wire.begin(i1, i2);
+    for (int i = 0; i < 10; i++)
+    {
+      digitalWrite(BUILTIN_LED, HIGH);
+      delay(300);
+      digitalWrite(BUILTIN_LED, LOW);
+      delay(100);
+    }
+    WiFi.softAP(ssid);
+    WiFi.softAPConfig(local_ip, gateway, subnet);
+    delay(2000);
+    StartServer();
 
-  pinMode(BUILTIN_LED, OUTPUT);
-  pinMode(BUTTON_PIN, INPUT_PULLUP);
-  pinMode(BUZZER_PIN, OUTPUT);
-  pinMode(LEVEL_PIN, INPUT_PULLUP);
-  pinMode(LEDN_PIN, OUTPUT);
+    if(SPIFFS.begin(true)){
+      Serial.println("An Error has occurred while mounting SPIFFS");
+      return;
+    }
 
-  for (int i = 0; i < 10; i++)
-  {
-    digitalWrite(BUILTIN_LED, HIGH);
-    delay(300);
-    digitalWrite(BUILTIN_LED, LOW);
-    delay(100);
-  }
-  WiFi.softAP(ssid);
-  WiFi.softAPConfig(local_ip, gateway, subnet);
-  delay(2000);
-  StartServer();
+    Serial.begin(115200);
+    Serial.println("Start");
+    // rtc.begin();
+    delay(5000);
+    Serial.println("ringTask");
+    delay(5000);
+    // xTaskCreate(ringTask, "ring", 2048, NULL, 1, NULL);
 
-  if(SPIFFS.begin(true)){
-    Serial.println("An Error has occurred while mounting SPIFFS");
-    return;
-  }
-
-  Serial.begin(115200);
-      xTaskCreate(ringTask, "ring", 10000, NULL, 1, NULL);
-  
-  SetTime(readStringFromEEPROM(5));
-  
-  // EEPROM.read(0) == 0
-  // if (true){
-  // }else{
-  //   xTaskCreate(longpress, "longpress", 10000, NULL, 1, NULL);
-  // }
-
-      // xTaskCreate(configTask, "config", 10000, NULL, 1, &configHundle);
-
-  // if (EEPROM.read(0) == 0){
     
-  // }else{
-  //   xTaskCreate(longpress, "longpress", 10000, NULL, 1, NULL);
-  // }
- 
 }
 
 void loop(){
-  String ringTime = readStringFromEEPROM(3);
-  
-  if (ringTime == rtc.getTime()){
-      buzz();
-      for (int i = 0; i < 10; i++)
-      {
-        digitalWrite(BUILTIN_LED, HIGH);
-        delay(500);
-        digitalWrite(BUILTIN_LED, LOW);
-        delay(250);
+        delay(5000);
+ 
+        tm startTime = getTimeformString(readStringFromEEPROM(ADrStartTime));
+        Serial.println("startTime:");
+        
+        tm endTime = getTimeformString(readStringFromEEPROM(ADrEndTime));
+        Serial.println("endTime:");
+        Serial.print(endTime.tm_hour);
+
+        int intervals = readIntFromEEPROM(ADrIntervals);
+        Serial.println("startTime:");
+        Serial.print(startTime.tm_hour);
+
+        int delays =  (int)period_in_minutes(endTime, startTime) / intervals;
+        Serial.println("delays:");
+        Serial.print(delays);
+      if (true){
+        for (int i = 0; i < 10; i++)
+        {
+          Serial.println("ringing..");
+          digitalWrite(BUILTIN_LED, HIGH);
+          digitalWrite(LEDN_PIN, HIGH);
+          tone(BUZZER_PIN, 4100, 1000);
+          delay(500);
+          tone(BUZZER_PIN, 3200, 1000);
+          digitalWrite(BUILTIN_LED, LOW);
+          digitalWrite(BUILTIN_LED, LOW);
+          delay(250);
+        }
+        Serial.println(delays);
+        delay(delays * 60000);
       }
-    }
-  Serial.println(rtc.getTime());
-}
+      if (startTime.tm_hour == rtc.getHour() && startTime.tm_min == rtc.getMinute()){
+        start = true;
+      }else if (endTime.tm_hour == rtc.getHour() && endTime.tm_min == rtc.getMinute()){
+        start = false;
+      }
+      delay(10000);
+  }
