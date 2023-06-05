@@ -6,13 +6,24 @@
 #include <ESPAsyncWebServer.h> // Asynchronous Web Server Library
 #include <SPIFFS.h> // File system library for internal ESP32 memory
 #include <AsyncTCP.h> // Asynchronous TCP Library
-#include <Adafruit_GFX.h> // Core graphics library
-#include <Adafruit_SSD1306.h> // Hardware-specific library for SSD1306
-#include <Wire.h> // I2C library
+// #include <Adafruit_GFX.h> // Core graphics library
+// #include <Adafruit_SSD1306.h> // Hardware-specific library for SSD1306
+// #include <Wire.h> // I2C library
 #include <ESP32Servo.h>
 #include <FreeRTOS.h>
+// #include <TimeLib.h>
+#include <EEPROM.h>
 
-ESP32Time rtc(-3840); // Create a Real Time Clock object to be used throughout the code
+
+
+// Define the EEPROM address where the timer value will be stored
+#define TIMER_ADDR 0
+
+// Define the duration of the timer in seconds
+// #define TIMER_DURATION 60
+
+
+// ESP32Time rtc(-3840); // Create a Real Time Clock object to be used throughout the code
 
 #define i1 11
 #define i2 9
@@ -23,62 +34,22 @@ ESP32Time rtc(-3840); // Create a Real Time Clock object to be used throughout t
 
 //EEPROM Section-----------------------------
 
-int ADrStartTime = 1;// String
-int ADrEndTime = 2;// String
-int ADrIntervals = 3;// Int
 
-
-void writeStringToEEPROM(int addrOffset, const String &strToWrite)
-{
-  byte len = strToWrite.length();
-  EEPROM.write(addrOffset, len);
-  for (int i = 0; i < len; i++)
-  {
-    EEPROM.write(addrOffset + 1 + i, strToWrite[i]);
-  }
-}
-
-void writeTimeToEEPROM() {
-  // Get the current time
-  time_t now = time(nullptr);
-
-  // Write the time to the EEPROM
-  EEPROM.begin(64);
-  EEPROM.put(0, now);
+void storeInt(int value){
+  EEPROM.begin(sizeof(int));
+  EEPROM.write(0, value);
   EEPROM.commit();
-  EEPROM.end();
 }
 
-String readStringFromEEPROM(int addrOffset)
-{
-  int newStrLen = EEPROM.read(addrOffset);
-  char data[newStrLen + 1];
-  for (int i = 0; i < newStrLen; i++)
-  {
-    data[i] = EEPROM.read(addrOffset + 1 + i);
-  }
-  data[newStrLen] = '\0';
-  return String(data);
-}
 
-void writeIntIntoEEPROM(int address, int number)
-{ 
-  EEPROM.write(address, number >> 8);
-  EEPROM.write(address + 1, number & 0xFF);
-}
 
-int readIntFromEEPROM(int address)
-{
-  return (EEPROM.read(address) << 8) + EEPROM.read(address + 1);
+int readInt(){
+  int storedValue = EEPROM.read(0);
+  Serial.println(storedValue);
+  return storedValue;
 }
-///////////////////////////////////////////////
-unsigned long period_in_minutes(tm earlier, tm later){
-  int earlier_hours = earlier.tm_hour;
-  int earlier_minutes = earlier.tm_min;
-  int later_hours = later.tm_hour;
-  int later_minutes = later.tm_min;
-  return (later_hours * 60 + later_minutes) - (earlier_hours * 60 + earlier_minutes);
-  }
+  // Read the integer value from the EEPROM
+
 
 
 //#FINISHED 🎉🎉🎉🎉🎉🎉🎉🎉🎉🎉
@@ -92,15 +63,15 @@ tm getTimeformString(String timeString){
   return tim;
 }
 
-void SetTime(tm time){
-  rtc.setTime(0,
-  time.tm_min,
-  time.tm_hour,
-   0,0,0);
-  Serial.println("setTime");
-  Serial.println(time.tm_hour);
-  Serial.println(time.tm_min);
-}
+// void SetTime(tm time){
+//   rtc.setTime(0,
+//   time.tm_min,
+//   time.tm_hour,
+//    0,0,0);
+//   Serial.println("setTime");
+//   Serial.println(time.tm_hour);
+//   Serial.println(time.tm_min);
+// }
 /// ///////////////////////////////////////
 // void buzz(){
 //   for (int i = 0; i < 5; i++)
@@ -113,9 +84,7 @@ void SetTime(tm time){
 
 String processor(const String& var){
   // Serial.println(var);
-  if(var == "TIME"){ 
-    return rtc.getHour() + ":" + rtc.getMinute();
-  }
+  if(var == "TIME"){}
   return String();
 }
 
@@ -177,46 +146,21 @@ void StartServer(){
   server.on("/get", HTTP_GET, [] (AsyncWebServerRequest *request) {
     String inputMessage;
     String inputParam;
-    String setTime = "00:00";
-    String startAt = "00:00";
-    String endAt = "00:00";
+    String setTime;
     int interval = 0;
     // GET input4 value on <ESP_IP>/get?input3=<inputMessage>
     if (request->hasParam(INPUT_TIME)) {
       setTime = request->getParam(INPUT_TIME)->value();
       inputMessage = setTime;
-      writeStringToEEPROM(3, setTime);
+      storeInt(atoi(setTime.c_str()));
+      // writeStringToEEPROM(3, setTime);
     }
-    delay(1000);
-    if (request->hasParam("startAt")) {
-       startAt = request->getParam("startAt")->value();
-       inputMessage = startAt;
-      // inputParam = "startAt";
-      writeStringToEEPROM(ADrStartTime, startAt);
-    }
-    delay(1000);
-    if (request->hasParam("endAt")) {
-       endAt = request->getParam("endAt")->value();
-        inputMessage = endAt;
-      // inputParam = "endAt";
-      writeStringToEEPROM(ADrEndTime, endAt);
-    }
-    delay(1000);
-    if (request->hasParam("periods")) {
-      interval = request->getParam("periods")->value().toInt();
-      inputMessage = interval;
-      writeIntIntoEEPROM(ADrIntervals, interval);
-    }
+    // delay(1000);
+
     else {
       inputMessage = "No message sent";
       inputParam = "none";
     }
-    SetTime(getTimeformString(setTime));
-    Serial.println(inputMessage);
-    Serial.println(readStringFromEEPROM(ADrStartTime));
-    Serial.println(readStringFromEEPROM(ADrEndTime));
-    Serial.print(readIntFromEEPROM(ADrIntervals));
-    
     request->send(200, "text/html", "<h3>HTTP GET request sent to your ESP on input field (" 
                                      + inputParam + ") with value: " + inputMessage +
                                      "<br><a href=\"/\">Return to Home Page</a>"+"</h2>"+
@@ -296,7 +240,7 @@ void StartServer(){
  bool start = false;
 void setup(){
     EEPROM.begin(512);
-    Wire.begin(i1, i2);
+    // Wire.begin(i1, i2);
     pinMode(BUILTIN_LED, OUTPUT);
     pinMode(BUTTON_PIN, INPUT_PULLUP);
     pinMode(BUZZER_PIN, OUTPUT);
@@ -327,47 +271,26 @@ void setup(){
     Serial.println("ringTask");
     delay(5000);
     // xTaskCreate(ringTask, "ring", 2048, NULL, 1, NULL);
-
     
 }
 
+
+
 void loop(){
-        delay(5000);
- 
-        tm startTime = getTimeformString(readStringFromEEPROM(ADrStartTime));
-        Serial.println("startTime:");
-        
-        tm endTime = getTimeformString(readStringFromEEPROM(ADrEndTime));
-        Serial.println("endTime:");
-        Serial.print(endTime.tm_hour);
+  int time = readInt();
+  Serial.println(time);
+  delay(time *60000 );
+  Serial.println("ring");
+  for (int i = 0; i < 10; i++)
+  {
+    digitalWrite(BUZZER_PIN, HIGH);
+    digitalWrite(LEDN_PIN, HIGH);
+    digitalWrite(BUILTIN_LED, HIGH);
+    delay(500);
+     digitalWrite(BUZZER_PIN, LOW);
+    digitalWrite(LEDN_PIN, LOW);
+    digitalWrite(BUILTIN_LED, LOW);
+    delay(300);
 
-        int intervals = readIntFromEEPROM(ADrIntervals);
-        Serial.println("startTime:");
-        Serial.print(startTime.tm_hour);
-
-        int delays =  (int)period_in_minutes(endTime, startTime) / intervals;
-        Serial.println("delays:");
-        Serial.print(delays);
-      if (true){
-        for (int i = 0; i < 10; i++)
-        {
-          Serial.println("ringing..");
-          digitalWrite(BUILTIN_LED, HIGH);
-          digitalWrite(LEDN_PIN, HIGH);
-          tone(BUZZER_PIN, 4100, 1000);
-          delay(500);
-          tone(BUZZER_PIN, 3200, 1000);
-          digitalWrite(BUILTIN_LED, LOW);
-          digitalWrite(BUILTIN_LED, LOW);
-          delay(250);
-        }
-        Serial.println(delays);
-        delay(delays * 60000);
-      }
-      if (startTime.tm_hour == rtc.getHour() && startTime.tm_min == rtc.getMinute()){
-        start = true;
-      }else if (endTime.tm_hour == rtc.getHour() && endTime.tm_min == rtc.getMinute()){
-        start = false;
-      }
-      delay(10000);
   }
+}
