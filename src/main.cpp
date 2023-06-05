@@ -30,7 +30,7 @@
 #define BUTTON_PIN       21  // GIOP21 pin connected to button
 #define LEDN_PIN          5
 #define BUZZER_PIN       7  // GIOP22 pin connected to buzzer
-#define LEVEL_PIN        13  // GIOP23 pin connected to level sensor
+#define LEVEL_PIN        11  // GIOP23 pin connected to level sensor
 
 //EEPROM Section-----------------------------
 
@@ -47,8 +47,38 @@ int readInt(){
   int storedValue = EEPROM.read(0);
   Serial.println(storedValue);
   return storedValue;
+}// Read the integer value from the EEPROM
+
+
+// 0 7450 - 7250
+// 1 7150
+// 2 7050
+// 3 6720
+// 4 6670
+
+//6600
+int level(int read){
+  if (read > 7450){
+    return 0;
+  }else if (read > 7250){
+    return 1;
+  }else if(read > 7150){
+    return 2;
+  }else if(read > 7050){
+    return 3;
+  }else if(read > 6720){
+    return 4;
+  }else if(read > 6695){
+    return 5;
+  }else if(read > 6670){
+    return 6;
+  }else if(read > 6000){
+    return 7;
+  }else if(read > 5700){
+    return -1;
+  }
+  return -2;
 }
-  // Read the integer value from the EEPROM
 
 
 
@@ -84,7 +114,37 @@ tm getTimeformString(String timeString){
 
 String processor(const String& var){
   // Serial.println(var);
-  if(var == "TIME"){}
+  if(var == "LEVEL"){
+    switch (level(analogRead(LEVEL_PIN)))
+    {
+    case 0:
+      return "You did it!!✨, 0%";
+      break;
+    case 1:
+      return "Almost there!!🔥, 20%";
+      break;
+    case 2:
+      return "Keep Going!!🔥, 30%";
+      break;
+    case 3:
+      return "Drink More!!💧, 40%";
+      break;
+    case 4:
+      return "Water is Life🍃, 60%";
+      break;
+    case 5:
+      return "Drink Drink Drink💪, 80%";
+      break;
+    case 6:
+      return "Start your day!! ☀️, 95%";
+      break;
+    case 7:
+      return "Drink me, 100%";
+      break;
+    default:
+      break;
+    }
+  }
   return String();
 }
 
@@ -108,7 +168,6 @@ AsyncWebServer  server(80); // Object of WebServer(HTTP port, 80 is defualt)
 String header; // Variable to store HTTP request
 
 
-// // #define SHORT_PRESS_TIME 2000 // 500 milliseconds
 // // Variables will change:
 // // the current reading from the input pin
 // unsigned long pressedTime  = 0;
@@ -235,6 +294,8 @@ void StartServer(){
 //   }
   
 // }
+
+
 
 ///////////////////////////////////////////////////////////
  bool start = false;
